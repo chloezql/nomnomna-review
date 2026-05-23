@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Business UI responsive ─────────────────────────────── */
+.biz-header         { padding: 32px 24px 24px; margin-bottom: 40px; }
+.biz-logo           { width: 56px; height: 56px; }
+.biz-title          { font-size: 42px; line-height: 48px; letter-spacing: -1px; }
+.biz-section-title  { font-size: 22px; }
+.biz-content        { padding: 0 24px; }
+.biz-form           { padding: 28px; }
+
+@media (max-width: 640px) {
+  .biz-header        { padding: 20px 16px 16px; margin-bottom: 24px; }
+  .biz-logo          { width: 36px; height: 36px; }
+  .biz-title         { font-size: 26px; line-height: 32px; letter-spacing: -0.4px; }
+  .biz-section-title { font-size: 18px; }
+  .biz-content       { padding: 0 16px; }
+  .biz-form          { padding: 16px; }
+}

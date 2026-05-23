@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes shimmer {
+  0%   { background-position:  200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.progress-shimmer {
+  background: linear-gradient(
+    90deg,
+    #f87171 20%,
+    #fca5a5 38%,
+    #ffffff 50%,
+    #fca5a5 62%,
+    #f87171 80%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
