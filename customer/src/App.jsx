@@ -78,7 +78,7 @@ export default function App() {
   useEffect(() => {
     const storeId = new URLSearchParams(window.location.search).get('store');
     if (!storeId) return;
-    fetch(`/api/store/${storeId}`)
+    fetch(`${import.meta.env.VITE_API_URL}/api/store/${storeId}`)
       .then(r => r.json())
       .then(data => setParams({
         storeName: data.storeName || DEFAULT_PARAMS.storeName,
@@ -112,7 +112,7 @@ export default function App() {
     setError('');
 
     try {
-      const res = await fetch('/api/generate-review', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/generate-review`, {
         method: 'POST',
         signal: abortRef.current.signal,
         headers: { 'Content-Type': 'application/json' },

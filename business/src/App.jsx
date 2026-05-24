@@ -250,7 +250,7 @@ export default function App() {
   }, [placesReady]);
 
   useEffect(() => {
-    fetch('/api/stores').then(r => r.json()).then(setStores).catch(() => {});
+    fetch(`${import.meta.env.VITE_API_URL}/api/stores`).then(r => r.json()).then(setStores).catch(() => {});
   }, []);
 
   const set = (key) => (e) => {
@@ -275,7 +275,7 @@ export default function App() {
     setSaving(true);
     setError('');
     try {
-      const res = await fetch('/api/store', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/store`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),

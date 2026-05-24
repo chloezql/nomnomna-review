@@ -18,7 +18,7 @@ export default function FinishPage({ onShareAnother, storeName }) {
     if (!feedbackText.trim()) return;
     setSending(true);
     try {
-      await fetch('/api/feedback', {
+      await fetch(`${import.meta.env.VITE_API_URL}/api/feedback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ feedback: feedbackText, storeName: storeName || 'Unknown' }),
