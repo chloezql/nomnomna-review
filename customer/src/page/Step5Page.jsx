@@ -39,11 +39,11 @@ export default function Step5Page({ params, onPlatformOpen, onBack }) {
   };
 
   const platforms = [
-    { key: 'googlereview', name: 'Google Review', icon: googleIcon,    disabled: false },
+    { key: 'googlereview', name: 'Google Review', icon: googleIcon,    disabled: !params.googlePlaceId },
     { key: 'yelp',         name: 'Yelp Review',   icon: yelpIcon,      disabled: !params.yelpBusinessId },
-    { key: 'instagram',    name: 'Instagram',      icon: instagramIcon, disabled: false },
-    { key: 'facebook',     name: 'Facebook',       icon: facebookIcon,  disabled: false },
-    { key: 'rednote',      name: 'Rednote',        icon: rednoteIcon,   disabled: false },
+    { key: 'instagram',    name: 'Instagram',      icon: instagramIcon, disabled: !params.instagramProfileUrl },
+    { key: 'facebook',     name: 'Facebook',       icon: facebookIcon,  disabled: !params.facebookPageUrl },
+    { key: 'rednote',      name: 'Rednote',        icon: rednoteIcon,   disabled: !params.redNoteUserId },
   ];
 
   return (

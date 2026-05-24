@@ -74,37 +74,22 @@ export default function App() {
   const [error, setError] = useState('');
   const abortRef = useRef(null);
 
-  // Load store params from URL once landing is dismissed
+  // Fetch store info from DB on mount using storeId from URL
   useEffect(() => {
-    if (showLanding) return;
-    const sp = new URLSearchParams(window.location.search);
-    const storeId = sp.get('store');
-    if (storeId) {
-      fetch(`/api/store/${storeId}`)
-        .then(r => r.json())
-        .then(data => setParams({
-          storeName: data.storeName || DEFAULT_PARAMS.storeName,
-          googlePlaceId: data.googlePlaceId || DEFAULT_PARAMS.googlePlaceId,
-          yelpBusinessId: data.yelpBusinessId || DEFAULT_PARAMS.yelpBusinessId,
-          instagramProfileUrl: data.instagramProfileUrl || DEFAULT_PARAMS.instagramProfileUrl,
-          facebookPageUrl: data.facebookPageUrl || DEFAULT_PARAMS.facebookPageUrl,
-          redNoteUserId: data.redNoteUserId || DEFAULT_PARAMS.redNoteUserId,
-        }))
-        .catch(() => {});
-      return;
-    }
-    const storeName = sp.get('storeName');
-    if (storeName) {
-      setParams({
-        storeName,
-        googlePlaceId: sp.get('googlePlaceId') || DEFAULT_PARAMS.googlePlaceId,
-        yelpBusinessId: sp.get('yelpBusinessId') || DEFAULT_PARAMS.yelpBusinessId,
-        instagramProfileUrl: sp.get('instagramProfileUrl') || DEFAULT_PARAMS.instagramProfileUrl,
-        facebookPageUrl: sp.get('facebookPageUrl') || DEFAULT_PARAMS.facebookPageUrl,
-        redNoteUserId: sp.get('redNoteUserId') || DEFAULT_PARAMS.redNoteUserId,
-      });
-    }
-  }, [showLanding]);
+    const storeId = new URLSearchParams(window.location.search).get('store');
+    if (!storeId) return;
+    fetch(`/api/store/${storeId}`)
+      .then(r => r.json())
+      .then(data => setParams({
+        storeName: data.storeName || DEFAULT_PARAMS.storeName,
+        googlePlaceId: data.googlePlaceId || DEFAULT_PARAMS.googlePlaceId,
+        yelpBusinessId: data.yelpBusinessId || DEFAULT_PARAMS.yelpBusinessId,
+        instagramProfileUrl: data.instagramProfileUrl || DEFAULT_PARAMS.instagramProfileUrl,
+        facebookPageUrl: data.facebookPageUrl || DEFAULT_PARAMS.facebookPageUrl,
+        redNoteUserId: data.redNoteUserId || DEFAULT_PARAMS.redNoteUserId,
+      }))
+      .catch(() => {});
+  }, []);
 
   // Auto-advance from step 2 to 3 when generation completes
   useEffect(() => {
