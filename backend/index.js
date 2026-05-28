@@ -47,10 +47,15 @@ app.post('/api/generate-review', async (req, res) => {
     ? `The reviewer wants to highlight: ${highlights.map(h => HIGHLIGHT_LABELS[h] || h).join(', ')}.`
     : '';
 
+  const highlightInstructions = highlights.length > 0
+    ? `For each review, inline the [H] and [/H] tags directly around the words inside the review text that describe each highlighted topic (${highlights.map(h => HIGHLIGHT_LABELS[h] || h).join(', ')}). The tags must wrap the actual words as they appear in the review — do NOT append tagged phrases at the end. Never tag the store name. Tag only 2–4 words maximum — typically an adjective + noun or adverb + adjective. Never tag a full clause or more than 4 words. Example: "The [H]cozy and inviting[/H] atmosphere made it perfect to relax. The staff was [H]incredibly attentive and friendly[/H], which really made the visit." Every review must contain at least one inline [H]...[/H] tag.`
+    : '';
+
   const prompt = `Generate 3 distinct, realistic customer reviews for a restaurant or business called "${storeName}".
 ${highlightText}
 Writing style: ${toneDesc}.
 Each review should be 2–4 sentences, sound like a real customer, and be unique in perspective and phrasing.
+${highlightInstructions}
 Return ONLY a JSON object in this exact format: { "reviews": ["...", "...", "..."] }`;
 
   try {

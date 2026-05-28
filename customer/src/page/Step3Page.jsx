@@ -3,6 +3,21 @@ import step3Asset from '../../assets/step_3_asset.png';
 
 const BRICOLAGE = "'Bricolage Grotesque', sans-serif";
 
+function renderHighlighted(text) {
+  const parts = text.split(/(\[H\].*?\[\/H\])/g);
+  return parts.map((part, i) => {
+    const match = part.match(/^\[H\](.*?)\[\/H\]$/);
+    if (match) {
+      return (
+        <mark key={i} style={{ background: '#a3e635', color: 'inherit', borderRadius: '2px', padding: '0 1px' }}>
+          {match[1]}
+        </mark>
+      );
+    }
+    return part;
+  });
+}
+
 const cardBase = {
   minHeight: '92px',
   borderRadius: '12px',
@@ -72,7 +87,7 @@ export default function Step3Page({ reviews, selectedIdx, onSelect, onNext, onBa
                         <span key={i} style={{ color: '#f59e0b', fontSize: '1.1rem', lineHeight: 1 }}>★</span>
                       ))}
                     </div>
-                    <p className="text-gray-800 text-base leading-relaxed">{review}</p>
+                    <p className="text-gray-800 text-base leading-relaxed">{renderHighlighted(review)}</p>
                   </div>
                   {active && (
                     <div
