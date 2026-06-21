@@ -23,12 +23,6 @@ const fieldStyle = {
   transition: 'border-color 0.15s',
 };
 
-const fieldAutoFilledStyle = {
-  ...fieldStyle,
-  background: 'linear-gradient(255.23deg, rgba(199, 244, 100, 0.31) 4.4%, rgba(255, 255, 255, 0.31) 101.19%)',
-  border: `1px solid ${TEAL}`,
-};
-
 const fieldDisabledStyle = {
   ...fieldStyle,
   background: '#F0F0F0',
@@ -236,7 +230,20 @@ export default function App() {
 
   useEffect(() => {
     if (!placesReady || !searchRef.current || acRef.current) return;
-    const ac = new window.google.maps.places.Autocomplete(searchRef.current, {
+    const nameCache = new Map();
+    const acService = new window.google.maps.places.AutocompleteService();
+    const input = searchRef.current;
+    const handleInput = () => {
+      const val = input.value;
+      if (!val || val.length < 2) return;
+      acService.getPlacePredictions({ input: val, types: ['establishment'] }, (predictions, status) => {
+        if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
+          predictions.forEach(p => nameCache.set(p.place_id, p.structured_formatting.main_text));
+        }
+      });
+    };
+    input.addEventListener('input', handleInput);
+    const ac = new window.google.maps.places.Autocomplete(input, {
       types: ['establishment'],
       fields: ['name', 'place_id'],
     });
@@ -244,9 +251,11 @@ export default function App() {
     ac.addListener('place_changed', () => {
       const place = ac.getPlace();
       if (!place.place_id) return;
-      setForm(f => ({ ...f, storeName: place.name || f.storeName, googlePlaceId: place.place_id }));
+      const name = nameCache.get(place.place_id) || place.name || '';
+      setForm(f => ({ ...f, storeName: name, googlePlaceId: place.place_id }));
       setAutoFilled({ storeName: true, googlePlaceId: true });
     });
+    return () => input.removeEventListener('input', handleInput);
   }, [placesReady]);
 
   useEffect(() => {
@@ -359,8 +368,8 @@ export default function App() {
                   ref={searchRef}
                   type="text"
                   placeholder={placesReady ? 'Search store name…' : MAPS_KEY ? 'Loading Google Places…' : 'Google Places disabled'}
-                  disabled
-                  style={fieldDisabledStyle}
+                  disabled={!placesReady}
+                  style={placesReady ? fieldStyle : fieldDisabledStyle}
                   onFocus={e => { e.target.style.borderColor = LIME; }}
                   onBlur={e => { e.target.style.borderColor = 'transparent'; }}
                 />
@@ -376,7 +385,7 @@ export default function App() {
                   onChange={set('storeName')}
                   placeholder="Joe's Coffee"
                   disabled={placesReady}
-                  style={placesReady ? fieldDisabledStyle : autoFilled.storeName ? fieldAutoFilledStyle : fieldStyle}
+                  style={autoFilled.storeName ? fieldStyle : placesReady ? fieldDisabledStyle : fieldStyle}
                   onFocus={e => { if (!placesReady && !autoFilled.storeName) e.target.style.borderColor = LIME; }}
                   onBlur={e => { if (!placesReady && !autoFilled.storeName) e.target.style.borderColor = 'transparent'; }}
                 />
@@ -392,7 +401,7 @@ export default function App() {
                   onChange={set('googlePlaceId')}
                   placeholder="Auto-filled above, or enter manually"
                   disabled={placesReady}
-                  style={{ ...(placesReady ? fieldDisabledStyle : autoFilled.googlePlaceId ? fieldAutoFilledStyle : fieldStyle), fontFamily: 'monospace', fontSize: '12px' }}
+                  style={{ ...(autoFilled.googlePlaceId ? fieldStyle : placesReady ? fieldDisabledStyle : fieldStyle), fontFamily: 'monospace', fontSize: '12px' }}
                   onFocus={e => { if (!placesReady && !autoFilled.googlePlaceId) e.target.style.borderColor = LIME; }}
                   onBlur={e => { if (!placesReady && !autoFilled.googlePlaceId) e.target.style.borderColor = 'transparent'; }}
                 />
