@@ -93,9 +93,36 @@ app.post('/api/feedback', async (req, res) => {
 });
 
 const REDNOTE_HOSTS = ['xhslink.cn', 'xhslink.com', 'xiaohongshu.com'];
+const YELP_HOST_REGEX = /^([a-z0-9-]+\.)?yelp\.[a-z.]+$/i;
 
 function isRedNoteHost(hostname) {
   return REDNOTE_HOSTS.some(h => hostname === h || hostname.endsWith(`.${h}`));
+}
+
+// Follows redirects on a short/share link server-side (short-link services
+// only expose the real target via a redirect, not in the URL itself) and
+// pulls an ID out of wherever it lands. Some share links (e.g. Yelp's via
+// Adjust) land on an attribution page that never issues a real HTTP redirect
+// to the destination — it decides app-vs-web with client-side JS instead —
+// but embeds the real target URL-encoded in its own query string, so we also
+// check a decoded copy of the final URL.
+async function resolveRedirectAndExtract(url, extractRegex) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(url, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15' },
+    });
+    const finalUrl = response.url;
+    let decodedUrl = finalUrl;
+    try { decodedUrl = decodeURIComponent(finalUrl); } catch { /* leave as-is if not decodable */ }
+    const match = finalUrl.match(extractRegex) || decodedUrl.match(extractRegex);
+    return { resolvedUrl: finalUrl, id: match ? match[1] : null };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 app.post('/api/resolve-rednote-link', async (req, res) => {
@@ -113,23 +140,36 @@ app.post('/api/resolve-rednote-link', async (req, res) => {
   }
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const response = await fetch(parsedUrl.href, {
-      redirect: 'follow',
-      signal: controller.signal,
-      headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15' },
-    });
-    clearTimeout(timeout);
-
-    const match = response.url.match(/\/user\/profile\/([a-zA-Z0-9_-]+)/);
-    if (!match) {
-      return res.status(422).json({ error: 'Could not find a user ID in the resolved link', resolvedUrl: response.url });
-    }
-    res.json({ redNoteUserId: match[1], resolvedUrl: response.url });
+    const { resolvedUrl, id } = await resolveRedirectAndExtract(parsedUrl.href, /\/user\/profile\/([a-zA-Z0-9_-]+)/);
+    if (!id) return res.status(422).json({ error: 'Could not find a user ID in the resolved link', resolvedUrl });
+    res.json({ redNoteUserId: id, resolvedUrl });
   } catch (err) {
     console.error('RedNote link resolve error:', err.message);
     res.status(502).json({ error: 'Failed to resolve RedNote link' });
+  }
+});
+
+app.post('/api/resolve-yelp-link', async (req, res) => {
+  const { url } = req.body;
+  if (!url?.trim()) return res.status(400).json({ error: 'url is required' });
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url.trim());
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL' });
+  }
+  if (!YELP_HOST_REGEX.test(parsedUrl.hostname)) {
+    return res.status(400).json({ error: 'URL must be a Yelp (yelp.com / yelp.to) link' });
+  }
+
+  try {
+    const { resolvedUrl, id } = await resolveRedirectAndExtract(parsedUrl.href, /yelp\.[^/]+\/(?:writeareview\/)?biz\/([^?/#\s]+)/);
+    if (!id) return res.status(422).json({ error: 'Could not find a business ID in the resolved link', resolvedUrl });
+    res.json({ yelpBusinessId: id, resolvedUrl });
+  } catch (err) {
+    console.error('Yelp link resolve error:', err.message);
+    res.status(502).json({ error: 'Failed to resolve Yelp link' });
   }
 });
 

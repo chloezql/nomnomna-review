@@ -214,6 +214,8 @@ export default function App() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [autoFilled, setAutoFilled] = useState({ storeName: false, googlePlaceId: false });
   const [yelpInput, setYelpInput] = useState('');
+  const [yelpStatus, setYelpStatus] = useState('idle'); // idle | resolving | error
+  const [yelpError, setYelpError] = useState('');
   const [redNoteInput, setRedNoteInput] = useState('');
   const [redNoteStatus, setRedNoteStatus] = useState('idle'); // idle | resolving | error
   const [redNoteError, setRedNoteError] = useState('');
@@ -280,9 +282,42 @@ export default function App() {
     setAutoFilled(a => ({ ...a, [key]: false }));
   };
 
-  const handleYelpBlur = () => {
-    if (!yelpInput.trim()) { setForm(f => ({ ...f, yelpBusinessId: '' })); return; }
-    setForm(f => ({ ...f, yelpBusinessId: extractYelpId(yelpInput) }));
+  const handleYelpBlur = async () => {
+    const trimmed = yelpInput.trim();
+    setYelpError('');
+
+    if (!trimmed) {
+      setForm(f => ({ ...f, yelpBusinessId: '' }));
+      setYelpStatus('idle');
+      return;
+    }
+
+    // yelp.to share links don't contain the ID directly — they need
+    // server-side resolution, same as RedNote's share links.
+    let hostname = '';
+    try { hostname = new URL(trimmed).hostname; } catch { /* not a URL — a raw slug/ID, handled below */ }
+
+    if (hostname !== 'yelp.to') {
+      setForm(f => ({ ...f, yelpBusinessId: extractYelpId(trimmed) }));
+      setYelpStatus('idle');
+      return;
+    }
+
+    setYelpStatus('resolving');
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/resolve-yelp-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: trimmed }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to resolve link.');
+      setForm(f => ({ ...f, yelpBusinessId: data.yelpBusinessId }));
+      setYelpStatus('idle');
+    } catch (err) {
+      setYelpStatus('error');
+      setYelpError(err.message || 'Failed to resolve Yelp link.');
+    }
   };
 
   const handleRedNoteBlur = async () => {
@@ -342,6 +377,8 @@ export default function App() {
       setForm(EMPTY_FORM);
       setAutoFilled({ storeName: false, googlePlaceId: false });
       setYelpInput('');
+      setYelpStatus('idle');
+      setYelpError('');
       setRedNoteInput('');
       setRedNoteStatus('idle');
       setRedNoteError('');
@@ -458,18 +495,28 @@ export default function App() {
               </Field>
 
               <Field
-                label="Yelp Write-a-Review URL"
-                hint="On your Yelp business page, click the 'Write a Review' button and copy that URL — not the regular business page URL. They use different IDs."
+                label="Yelp Business Link"
+                hint="Paste any Yelp link for your business — the business page URL, a yelp.to share link, or the 'Write a Review' link. We'll extract the right ID automatically."
               >
                 <input
                   value={yelpInput}
                   onChange={e => setYelpInput(e.target.value)}
                   onBlur={e => { e.target.style.borderColor = 'transparent'; handleYelpBlur(); }}
-                  placeholder="https://www.yelp.com/writeareview/biz/your-business-id"
+                  placeholder="https://www.yelp.com/biz/your-store or a yelp.to link"
                   style={fieldStyle}
                   onFocus={e => { e.target.style.borderColor = LIME; }}
                 />
-                {form.yelpBusinessId && (
+                {yelpStatus === 'resolving' && (
+                  <p style={{ fontSize: '11px', color: MUTED, marginTop: '4px', fontWeight: 600 }}>
+                    Resolving link…
+                  </p>
+                )}
+                {yelpStatus === 'error' && (
+                  <p style={{ fontSize: '11px', color: RED, marginTop: '4px', fontWeight: 600 }}>
+                    {yelpError}
+                  </p>
+                )}
+                {form.yelpBusinessId && yelpStatus === 'idle' && (
                   <p style={{ fontSize: '11px', color: MUTED, marginTop: '4px', fontWeight: 600 }}>
                     Extracted ID: <span style={{ fontFamily: 'monospace' }}>{form.yelpBusinessId}</span>
                   </p>
