@@ -1,12 +1,14 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import morgan from 'morgan';
 import { randomUUID } from 'crypto';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import ws from 'ws';
 
 const app = express();
+app.use(morgan('dev'));
 app.use(cors());
 app.use(express.json());
 
@@ -65,7 +67,8 @@ Return ONLY a JSON object in this exact format: { "reviews": ["...", "...", "...
       response_format: { type: 'json_object' },
     });
     const parsed = JSON.parse(completion.choices[0].message.content);
-    const reviews = Array.isArray(parsed.reviews) ? parsed.reviews : Object.values(parsed).flat();
+    const rawReviews = Array.isArray(parsed.reviews) ? parsed.reviews : Object.values(parsed).flat();
+    const reviews = rawReviews.filter(r => typeof r === 'string' && r.trim().length > 0).slice(0, 3);
     res.json({ reviews });
   } catch (err) {
     console.error('OpenAI error:', err.message);
@@ -87,6 +90,47 @@ app.post('/api/feedback', async (req, res) => {
     return res.status(500).json({ error: 'Failed to save feedback' });
   }
   res.json({ success: true });
+});
+
+const REDNOTE_HOSTS = ['xhslink.cn', 'xhslink.com', 'xiaohongshu.com'];
+
+function isRedNoteHost(hostname) {
+  return REDNOTE_HOSTS.some(h => hostname === h || hostname.endsWith(`.${h}`));
+}
+
+app.post('/api/resolve-rednote-link', async (req, res) => {
+  const { url } = req.body;
+  if (!url?.trim()) return res.status(400).json({ error: 'url is required' });
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url.trim());
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL' });
+  }
+  if (!isRedNoteHost(parsedUrl.hostname)) {
+    return res.status(400).json({ error: 'URL must be a RedNote (xiaohongshu.com / xhslink.cn) link' });
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const response = await fetch(parsedUrl.href, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15' },
+    });
+    clearTimeout(timeout);
+
+    const match = response.url.match(/\/user\/profile\/([a-zA-Z0-9_-]+)/);
+    if (!match) {
+      return res.status(422).json({ error: 'Could not find a user ID in the resolved link', resolvedUrl: response.url });
+    }
+    res.json({ redNoteUserId: match[1], resolvedUrl: response.url });
+  } catch (err) {
+    console.error('RedNote link resolve error:', err.message);
+    res.status(502).json({ error: 'Failed to resolve RedNote link' });
+  }
 });
 
 app.post('/api/store', async (req, res) => {

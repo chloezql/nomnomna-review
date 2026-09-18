@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 import step4Vector1 from '../../assets/step_4_vector_1.png';
 import step4Vector2 from '../../assets/step_4_vector_2.png';
 import editPageAsset from '../../assets/edit_page_asset.png';
@@ -13,15 +12,69 @@ const titleStyle = {
   letterSpacing: '-0.9px',
 };
 
-export default function Step4Page({ review, onEdit, onCopy }) {
-  const taRef = useRef(null);
+// Finds the single contiguous region that changed between two strings, so an
+// edit's effect on the plain text can be described as "replace [start,oldEnd)
+// with [start,newEnd)" instead of diffing the whole string.
+function diffEdit(oldStr, newStr) {
+  let start = 0;
+  const maxStart = Math.min(oldStr.length, newStr.length);
+  while (start < maxStart && oldStr[start] === newStr[start]) start++;
 
-  useEffect(() => {
-    if (taRef.current) {
-      taRef.current.style.height = 'auto';
-      taRef.current.style.height = taRef.current.scrollHeight + 'px';
-    }
-  }, [review]);
+  let oldEnd = oldStr.length;
+  let newEnd = newStr.length;
+  while (oldEnd > start && newEnd > start && oldStr[oldEnd - 1] === newStr[newEnd - 1]) {
+    oldEnd--;
+    newEnd--;
+  }
+  return { start, oldEnd, newEnd };
+}
+
+// Re-maps highlight ranges after an edit so highlighted phrases keep tracking
+// the same words as the user types, instead of drifting to the wrong offsets.
+function shiftRanges(ranges, { start, oldEnd, newEnd }) {
+  const delta = newEnd - oldEnd;
+  return ranges
+    .map(([s, e]) => {
+      if (e <= start) return [s, e];
+      if (s >= oldEnd) return [s + delta, e + delta];
+      if (s <= start && e >= oldEnd) return [s, e + delta];
+      if (s >= start && e <= oldEnd) return null;
+      if (s < start) return [s, start];
+      return [newEnd, e + delta];
+    })
+    .filter(r => r && r[1] > r[0]);
+}
+
+function renderHighlightedRanges(text, ranges) {
+  if (!ranges || ranges.length === 0) return text;
+  const sorted = [...ranges]
+    .map(([s, e]) => [Math.max(0, s), Math.min(text.length, e)])
+    .filter(([s, e]) => e > s)
+    .sort((a, b) => a[0] - b[0]);
+
+  const parts = [];
+  let cursor = 0;
+  sorted.forEach(([s, e], i) => {
+    if (s > cursor) parts.push(text.slice(cursor, s));
+    parts.push(
+      <mark key={i} style={{ background: '#a3e635', color: 'inherit', borderRadius: '2px', padding: '0 1px' }}>
+        {text.slice(s, e)}
+      </mark>
+    );
+    cursor = e;
+  });
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return parts;
+}
+
+const textBoxClassName = "w-full text-sm font-semibold leading-relaxed px-4 py-3 whitespace-pre-wrap break-words";
+
+export default function Step4Page({ review, ranges, onEdit, onCopy }) {
+  const handleChange = (e) => {
+    const newText = e.target.value;
+    const edit = diffEdit(review, newText);
+    onEdit(newText, shiftRanges(ranges, edit));
+  };
 
   return (
     <div
@@ -110,19 +163,25 @@ export default function Step4Page({ review, onEdit, onCopy }) {
               </div>
             </div>
 
-            {/* Editable review text */}
-            <textarea
-              ref={taRef}
-              value={review}
-              onChange={e => onEdit(e.target.value)}
-              className="w-full text-sm font-semibold text-gray-800 leading-relaxed resize-none focus:outline-none px-4 py-3"
-              style={{
-                borderRadius: '10px',
-                background: '#D9D9D94D',
-                overflow: 'hidden',
-                display: 'block',
-              }}
-            />
+            {/* Editable review text — a highlighted backdrop sits behind a
+                transparent-text textarea so the lime marks stay visible while
+                the user types; the backdrop's normal flow also drives the
+                block's height, so it grows with the content automatically. */}
+            <div style={{ position: 'relative' }}>
+              <div
+                aria-hidden="true"
+                className={`${textBoxClassName} text-gray-800`}
+                style={{ borderRadius: '10px', background: '#D9D9D94D', border: 'none' }}
+              >
+                {renderHighlightedRanges(review, ranges)}
+              </div>
+              <textarea
+                value={review}
+                onChange={handleChange}
+                className={`${textBoxClassName} resize-none focus:outline-none absolute inset-0 h-full`}
+                style={{ borderRadius: '10px', background: 'transparent', border: 'none', color: 'transparent', caretColor: '#1f2937' }}
+              />
+            </div>
           </div>
 
           {/* Copy button — overlaps the bottom edge of the card */}

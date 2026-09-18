@@ -16,6 +16,26 @@ const DEFAULT_PARAMS = {
   redNoteUserId: '',
 };
 
+// Strips [H]/[/H] highlight markers out of the AI-generated text and records
+// where each highlighted phrase landed in the plain text, so the edit screen
+// can render the highlight visually instead of leaking the raw tags.
+function parseHighlights(taggedText) {
+  const ranges = [];
+  let text = '';
+  let lastIndex = 0;
+  const regex = /\[H\](.*?)\[\/H\]/g;
+  let m;
+  while ((m = regex.exec(taggedText)) !== null) {
+    text += taggedText.slice(lastIndex, m.index);
+    const start = text.length;
+    text += m[1];
+    ranges.push([start, text.length]);
+    lastIndex = regex.lastIndex;
+  }
+  text += taggedText.slice(lastIndex);
+  return { text, ranges };
+}
+
 const PLATFORMS = [
   {
     key: 'googlereview',
@@ -36,6 +56,7 @@ const PLATFORMS = [
     key: 'facebook',
     name: 'Facebook',
     emoji: '👍',
+    newTab: true,
     actions: [
       { key: 'profile', label: 'Store Page', getUrl: (p) => p.facebookPageUrl, paramKey: 'facebookPageUrl' },
     ],
@@ -44,6 +65,7 @@ const PLATFORMS = [
     key: 'instagram',
     name: 'Instagram',
     emoji: '📷',
+    newTab: true,
     actions: [
       { key: 'profile', label: 'Store Page', getUrl: (p) => p.instagramProfileUrl, paramKey: 'instagramProfileUrl' },
     ],
@@ -52,9 +74,9 @@ const PLATFORMS = [
     key: 'rednote',
     name: 'RedNote',
     emoji: '🟥',
+    newTab: true,
     actions: [
-      { key: 'post', label: 'Create Post', getUrl: () => 'xhsdiscover://post_note?ignore_draft=true' },
-      { key: 'profile', label: 'Store Page', getUrl: (p) => `xhsdiscover://user/${p.redNoteUserId}`, paramKey: 'redNoteUserId' },
+      { key: 'profile', label: 'Store Page', getUrl: (p) => `https://www.xiaohongshu.com/user/profile/${p.redNoteUserId}`, paramKey: 'redNoteUserId' },
     ],
   },
 ];
@@ -70,6 +92,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [editedReview, setEditedReview] = useState('');
+  const [highlightRanges, setHighlightRanges] = useState([]);
   const [toast, setToast] = useState('');
   const [error, setError] = useState('');
   const abortRef = useRef(null);
@@ -217,7 +240,9 @@ export default function App() {
         selectedIdx={selectedIdx}
         onSelect={setSelectedIdx}
         onNext={() => {
-          setEditedReview(reviews[selectedIdx]);
+          const { text, ranges } = parseHighlights(reviews[selectedIdx]);
+          setEditedReview(text);
+          setHighlightRanges(ranges);
           setStep(4);
         }}
         onBack={() => setStep(1)}
@@ -227,7 +252,8 @@ export default function App() {
     page = (
       <Step4Page
         review={editedReview}
-        onEdit={setEditedReview}
+        ranges={highlightRanges}
+        onEdit={(text, ranges) => { setEditedReview(text); setHighlightRanges(ranges); }}
         onCopy={async () => {
           await copyToClipboard(editedReview);
           setStep(5);
@@ -246,7 +272,7 @@ export default function App() {
             const url = action.getUrl(params);
             if (!action.paramKey || params[action.paramKey]) {
               showToast(`Opening ${platform.name}!`);
-              setTimeout(() => openUrl(url), 350);
+              setTimeout(() => openUrl(url, platform.newTab), 350);
             }
           } else {
             const url = platform.getUrl(params);

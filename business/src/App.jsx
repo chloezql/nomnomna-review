@@ -37,6 +37,12 @@ function extractYelpId(input) {
   return m ? m[1] : input.trim();
 }
 
+function normalizeUrl(input) {
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
 const EMPTY_FORM = {
   storeName: '',
   googlePlaceId: '',
@@ -208,11 +214,15 @@ export default function App() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [autoFilled, setAutoFilled] = useState({ storeName: false, googlePlaceId: false });
   const [yelpInput, setYelpInput] = useState('');
+  const [redNoteInput, setRedNoteInput] = useState('');
+  const [redNoteStatus, setRedNoteStatus] = useState('idle'); // idle | resolving | error
+  const [redNoteError, setRedNoteError] = useState('');
   const [stores, setStores] = useState([]);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
   const [error, setError] = useState('');
   const [placesReady, setPlacesReady] = useState(false);
+  const [storesError, setStoresError] = useState('');
   const searchRef = useRef(null);
   const acRef = useRef(null);
 
@@ -259,7 +269,10 @@ export default function App() {
   }, [placesReady]);
 
   useEffect(() => {
-    fetch(`${import.meta.env.VITE_API_URL}/api/stores`).then(r => r.json()).then(setStores).catch(() => {});
+    fetch(`${import.meta.env.VITE_API_URL}/api/stores`)
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(setStores)
+      .catch(() => setStoresError('Failed to load store history — the backend or database may be unreachable.'));
   }, []);
 
   const set = (key) => (e) => {
@@ -270,6 +283,40 @@ export default function App() {
   const handleYelpBlur = () => {
     if (!yelpInput.trim()) { setForm(f => ({ ...f, yelpBusinessId: '' })); return; }
     setForm(f => ({ ...f, yelpBusinessId: extractYelpId(yelpInput) }));
+  };
+
+  const handleRedNoteBlur = async () => {
+    const trimmed = redNoteInput.trim();
+    setRedNoteError('');
+
+    if (!trimmed) {
+      setForm(f => ({ ...f, redNoteUserId: '' }));
+      setRedNoteStatus('idle');
+      return;
+    }
+
+    // Already a raw ID (not a share link) — use it directly.
+    if (!/^https?:\/\//i.test(trimmed)) {
+      setForm(f => ({ ...f, redNoteUserId: trimmed }));
+      setRedNoteStatus('idle');
+      return;
+    }
+
+    setRedNoteStatus('resolving');
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/resolve-rednote-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: trimmed }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to resolve link.');
+      setForm(f => ({ ...f, redNoteUserId: data.redNoteUserId }));
+      setRedNoteStatus('idle');
+    } catch (err) {
+      setRedNoteStatus('error');
+      setRedNoteError(err.message || 'Failed to resolve RedNote link.');
+    }
   };
 
   const showToast = (msg) => {
@@ -295,6 +342,9 @@ export default function App() {
       setForm(EMPTY_FORM);
       setAutoFilled({ storeName: false, googlePlaceId: false });
       setYelpInput('');
+      setRedNoteInput('');
+      setRedNoteStatus('idle');
+      setRedNoteError('');
       if (searchRef.current) searchRef.current.value = '';
       showToast('Store saved!');
     } catch {
@@ -407,12 +457,15 @@ export default function App() {
                 />
               </Field>
 
-              <Field label="Yelp Page URL">
+              <Field
+                label="Yelp Write-a-Review URL"
+                hint="On your Yelp business page, click the 'Write a Review' button and copy that URL — not the regular business page URL. They use different IDs."
+              >
                 <input
                   value={yelpInput}
                   onChange={e => setYelpInput(e.target.value)}
                   onBlur={e => { e.target.style.borderColor = 'transparent'; handleYelpBlur(); }}
-                  placeholder="https://www.yelp.com/biz/your-store-slug"
+                  placeholder="https://www.yelp.com/writeareview/biz/your-business-id"
                   style={fieldStyle}
                   onFocus={e => { e.target.style.borderColor = LIME; }}
                 />
@@ -430,7 +483,7 @@ export default function App() {
                   placeholder="https://facebook.com/…"
                   style={fieldStyle}
                   onFocus={e => { e.target.style.borderColor = LIME; }}
-                  onBlur={e => { e.target.style.borderColor = 'transparent'; }}
+                  onBlur={e => { e.target.style.borderColor = 'transparent'; setForm(f => ({ ...f, facebookPageUrl: normalizeUrl(f.facebookPageUrl) })); }}
                 />
               </Field>
 
@@ -441,19 +494,37 @@ export default function App() {
                   placeholder="https://instagram.com/…"
                   style={fieldStyle}
                   onFocus={e => { e.target.style.borderColor = LIME; }}
-                  onBlur={e => { e.target.style.borderColor = 'transparent'; }}
+                  onBlur={e => { e.target.style.borderColor = 'transparent'; setForm(f => ({ ...f, instagramProfileUrl: normalizeUrl(f.instagramProfileUrl) })); }}
                 />
               </Field>
 
-              <Field label="RedNote User ID">
+              <Field
+                label="RedNote Share Link"
+                hint="In the RedNote app: open your profile → Share → Copy Link, then paste it here."
+              >
                 <input
-                  value={form.redNoteUserId}
-                  onChange={set('redNoteUserId')}
-                  placeholder="RedNote user ID"
+                  value={redNoteInput}
+                  onChange={e => setRedNoteInput(e.target.value)}
+                  onBlur={e => { e.target.style.borderColor = 'transparent'; handleRedNoteBlur(); }}
+                  placeholder="https://xhslink.cn/m/…"
                   style={fieldStyle}
                   onFocus={e => { e.target.style.borderColor = LIME; }}
-                  onBlur={e => { e.target.style.borderColor = 'transparent'; }}
                 />
+                {redNoteStatus === 'resolving' && (
+                  <p style={{ fontSize: '11px', color: MUTED, marginTop: '4px', fontWeight: 600 }}>
+                    Resolving link…
+                  </p>
+                )}
+                {redNoteStatus === 'error' && (
+                  <p style={{ fontSize: '11px', color: RED, marginTop: '4px', fontWeight: 600 }}>
+                    {redNoteError}
+                  </p>
+                )}
+                {form.redNoteUserId && redNoteStatus === 'idle' && (
+                  <p style={{ fontSize: '11px', color: MUTED, marginTop: '4px', fontWeight: 600 }}>
+                    Extracted ID: <span style={{ fontFamily: 'monospace' }}>{form.redNoteUserId}</span>
+                  </p>
+                )}
               </Field>
 
             </div>
@@ -510,14 +581,15 @@ export default function App() {
                   background: 'white',
                   borderRadius: '20px',
                   padding: '48px 24px',
-                  border: '1px solid #F3F4F6',
+                  border: storesError ? `1px solid ${RED}` : '1px solid #F3F4F6',
                   boxShadow: '0px 0px 15px 0px #C7F46433',
                   textAlign: 'center',
-                  color: MUTED,
+                  color: storesError ? RED : MUTED,
                   fontSize: '14px',
+                  fontWeight: storesError ? 600 : 400,
                 }}
               >
-                No stores yet.
+                {storesError || 'No stores yet.'}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
